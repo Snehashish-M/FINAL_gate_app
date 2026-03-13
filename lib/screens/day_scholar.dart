@@ -96,13 +96,6 @@ class _DayScholarState extends State<DayScholar> {
               child: ListView(
                 children: [
 
-                  Text("Name: ${userData!["name"]}"),
-                  Text("Roll Number: ${userData!["rollNumber"]}"),
-                  Text("Degree: ${userData!["degree"]}"),
-                  Text("Phone: ${userData!["phone"]}"),
-
-                  const SizedBox(height: 20),
-
                   TextField(
                     controller: placeController,
                     decoration: const InputDecoration(

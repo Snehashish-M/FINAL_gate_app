@@ -171,15 +171,6 @@ class _LeaveApplicationState extends State<LeaveApplication> {
               child: ListView(
                 children: [
 
-                  Text("Name: ${userData!["name"]}"),
-                  Text("Roll Number: ${userData!["rollNumber"]}"),
-                  Text("Degree: ${userData!["degree"]}"),
-                  Text("Hostel: ${userData!["hostel"]}"),
-                  Text("Room: ${userData!["roomNumber"]}"),
-                  Text("Phone: ${userData!["phone"]}"),
-
-                  const SizedBox(height: 20),
-
                   TextField(
                     controller: floorController,
                     decoration: const InputDecoration(labelText: "Floor"),

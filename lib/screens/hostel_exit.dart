@@ -96,13 +96,6 @@ class _HostelExitState extends State<HostelExit> {
               child: ListView(
                 children: [
 
-                  Text("Name: ${userData!["name"]}"),
-                  Text("Roll: ${userData!["rollNumber"]}"),
-                  Text("Hostel: ${userData!["hostel"]}"),
-                  Text("Room: ${userData!["roomNumber"]}"),
-
-                  const SizedBox(height: 20),
-
                   TextField(
                     controller: destinationController,
                     decoration: const InputDecoration(
