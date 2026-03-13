@@ -1,4 +1,4 @@
-import 'dart:io';
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -23,7 +23,7 @@ class _ProfileSetupState extends State<ProfileSetup> {
   final roomController = TextEditingController();
   final phoneController = TextEditingController();
 
-  File? _image;
+  Uint8List? _imageBytes;
   String? existingPhoto;
 
   final picker = ImagePicker();
@@ -67,8 +67,10 @@ class _ProfileSetupState extends State<ProfileSetup> {
 
     if (picked != null) {
 
+      final bytes = await picked.readAsBytes();
+
       setState(() {
-        _image = File(picked.path);
+        _imageBytes = bytes;
       });
 
     }
@@ -76,71 +78,186 @@ class _ProfileSetupState extends State<ProfileSetup> {
 
   Future saveProfile() async {
 
+    print("=== PROFILE SAVE STARTED ===");
+
     User? user = FirebaseAuth.instance.currentUser;
 
-    if (user == null) return;
+    print("User: $user");
+    if (user == null) {
+      print("ERROR: No user found");
+      return;
+    }
 
     // Validate all required fields
+    print("Validating fields...");
+    print("Roll: ${rollController.text}");
+    print("Degree: ${degreeController.text}");
+    print("Hostel: ${hostelController.text}");
+    print("Room: ${roomController.text}");
+    print("Phone: ${phoneController.text}");
+    print("Image bytes: ${_imageBytes != null ? 'YES' : 'NO'}");
+    print("Existing photo: $existingPhoto");
+
     if (rollController.text.isEmpty ||
         degreeController.text.isEmpty ||
         hostelController.text.isEmpty ||
         roomController.text.isEmpty ||
-        phoneController.text.isEmpty ||
-        _image == null && existingPhoto == null) {
+        phoneController.text.isEmpty) {
 
+      print("ERROR: Validation failed");
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Please fill all fields and upload a photo")),
+        const SnackBar(content: Text("Please fill all required fields")),
       );
       return;
     }
 
-    String imageUrl = existingPhoto ?? "";
+    // On first time setup, photo is optional. On edit, photo is also optional
+    print("Photo check passed (photo is optional)");
 
-    if (_image != null) {
+    print("Validation passed");
+    print("Mounted: $mounted");
 
-      final ref = FirebaseStorage.instance
-          .ref()
-          .child("profile_photos")
-          .child("${user.uid}.jpg");
-
-      await ref.putFile(_image!);
-
-      imageUrl = await ref.getDownloadURL();
+    // Show loading dialog
+    if (!mounted) {
+      print("ERROR: Not mounted before showing dialog");
+      return;
     }
 
-    await FirebaseFirestore.instance
-        .collection("users")
-        .doc(user.uid)
-        .update({
+    BuildContext? dialogContext;
 
-      "rollNumber": rollController.text,
-      "degree": degreeController.text,
-      "hostel": hostelController.text,
-      "roomNumber": roomController.text,
-      "phone": phoneController.text,
-      "photo": imageUrl,
-
-    });
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text("Profile Saved")),
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) {
+        print("Dialog builder called");
+        dialogContext = ctx;
+        return const AlertDialog(
+          content: Row(
+            children: [
+              CircularProgressIndicator(),
+              SizedBox(width: 20),
+              Text("Saving profile..."),
+            ],
+          ),
+        );
+      },
     );
 
-    // If first time setup, navigate to StudentDashboard
-    if (widget.isFirstTime) {
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(
-          builder: (context) => const StudentDashboard(),
-        ),
-      );
-    } else {
-      Navigator.pop(context);
+    print("Dialog shown");
+
+    try {
+      String imageUrl = existingPhoto ?? "";
+      print("Initial image URL: $imageUrl");
+
+      if (_imageBytes != null) {
+        print("Uploading image...");
+        try {
+          final ref = FirebaseStorage.instance
+              .ref()
+              .child("profile_photos")
+              .child("${user.uid}.jpg");
+
+          print("Firebase Storage ref created: ${ref.fullPath}");
+          print("Image size: ${_imageBytes!.length} bytes");
+
+          print("Attempting upload...");
+          final task = ref.putData(_imageBytes!);
+
+          // Listen to upload progress
+          task.snapshotEvents.listen((event) {
+            print("Upload progress: ${event.bytesTransferred}/${event.totalBytes}");
+          });
+
+          await task.timeout(
+            const Duration(seconds: 60),
+          );
+
+          print("Image uploaded successfully");
+
+          imageUrl = await ref.getDownloadURL();
+          print("Image URL obtained: $imageUrl");
+        } catch (uploadError) {
+          print("ERROR uploading image: $uploadError");
+          print("Error type: ${uploadError.runtimeType}");
+          // Don't throw - allow profile to save without photo
+          print("Continuing without photo...");
+          imageUrl = ""; // Set empty photo URL
+        }
+      }
+
+      print("Saving to Firestore...");
+      print("Document path: users/${user.uid}");
+      print("Data: {rollNumber: ${rollController.text}, degree: ${degreeController.text}, hostel: ${hostelController.text}, roomNumber: ${roomController.text}, phone: ${phoneController.text}, photo: $imageUrl}");
+
+      await FirebaseFirestore.instance
+          .collection("users")
+          .doc(user.uid)
+          .set({
+
+        "rollNumber": rollController.text,
+        "degree": degreeController.text,
+        "hostel": hostelController.text,
+        "roomNumber": roomController.text,
+        "phone": phoneController.text,
+        "photo": imageUrl,
+
+      }, SetOptions(merge: true));
+
+      print("Firestore save completed");
+
+      // Close loading dialog using the dialogContext
+      if (dialogContext != null && dialogContext!.mounted) {
+        print("Closing dialog...");
+        Navigator.of(dialogContext!).pop();
+        print("Dialog closed");
+      } else {
+        print("ERROR: Dialog context not available");
+      }
+
+      if (mounted) {
+        print("Showing success message");
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("Profile Saved Successfully")),
+        );
+      }
+
+      // If first time setup, navigate to StudentDashboard
+      if (widget.isFirstTime && mounted) {
+        print("First time setup - navigating to StudentDashboard");
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(
+            builder: (context) => const StudentDashboard(),
+          ),
+        );
+      } else if (mounted) {
+        print("Editing existing profile - popping back");
+        Navigator.pop(context);
+      }
+      print("=== PROFILE SAVE COMPLETED SUCCESSFULLY ===");
+    } catch (e) {
+      print("=== ERROR IN PROFILE SAVE ===");
+      print("Exception: $e");
+      print("Exception type: ${e.runtimeType}");
+
+      // Close loading dialog
+      if (dialogContext != null && dialogContext!.mounted) {
+        Navigator.of(dialogContext!).pop();
+      }
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("Error: ${e.toString()}")),
+        );
+      }
     }
   }
 
   @override
   Widget build(BuildContext context) {
+
+    print("=== PROFILE SETUP WIDGET BUILDING ===");
 
     return Scaffold(
 
@@ -163,7 +280,7 @@ class _ProfileSetupState extends State<ProfileSetup> {
                   border: Border.all(color: const Color(0xFF1976D2)),
                 ),
                 child: const Text(
-                  "Complete your profile to access the student portal. All fields are mandatory.",
+                  "Complete your profile to access the student portal. All text fields are mandatory. Photo is optional.",
                   style: TextStyle(
                     color: Color(0xFF1976D2),
                     fontWeight: FontWeight.w500,
@@ -174,8 +291,8 @@ class _ProfileSetupState extends State<ProfileSetup> {
             if (widget.isFirstTime)
               const SizedBox(height: 20),
 
-            if (_image != null)
-              Image.file(_image!, height: 120)
+            if (_imageBytes != null)
+              Image.memory(_imageBytes!, height: 120)
 
             else if (existingPhoto != null && existingPhoto!.isNotEmpty)
               Image.network(existingPhoto!, height: 120),
@@ -235,7 +352,10 @@ class _ProfileSetupState extends State<ProfileSetup> {
             const SizedBox(height: 30),
 
             ElevatedButton(
-              onPressed: saveProfile,
+              onPressed: () {
+                print("=== SAVE BUTTON TAPPED ===");
+                saveProfile();
+              },
               child: const Text("Save Profile"),
             ),
 

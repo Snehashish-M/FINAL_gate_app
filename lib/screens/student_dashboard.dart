@@ -4,6 +4,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'day_scholar.dart';
 import 'hostel_exit.dart';
 import 'leave_application.dart';
+import 'leave_status.dart';
 import 'profile_setup.dart';
 
 class StudentDashboard extends StatelessWidget {
@@ -93,6 +94,22 @@ class StudentDashboard extends StatelessWidget {
 
               },
               child: const Text("Leave Application"),
+            ),
+
+            const SizedBox(height: 15),
+
+            ElevatedButton(
+              onPressed: () {
+
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => const LeaveStatus(),
+                  ),
+                );
+
+              },
+              child: const Text("Leave Status"),
             ),
 
             const SizedBox(height: 15),

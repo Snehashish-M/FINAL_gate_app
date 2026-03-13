@@ -114,6 +114,26 @@ class _LeaveApplicationState extends State<LeaveApplication> {
 
     if (user == null) return;
 
+    // Validate required fields
+    if (leavingDate == null ||
+        returnDate == null ||
+        purposeController.text.isEmpty ||
+        transportController.text.isEmpty ||
+        addressController.text.isEmpty ||
+        parentPhoneController.text.isEmpty) {
+      print("Validation failed:");
+      print("  Leaving Date: ${leavingDate != null ? 'OK' : 'MISSING'}");
+      print("  Return Date: ${returnDate != null ? 'OK' : 'MISSING'}");
+      print("  Purpose: ${purposeController.text.isNotEmpty ? 'OK' : 'MISSING'}");
+      print("  Transport: ${transportController.text.isNotEmpty ? 'OK' : 'MISSING'}");
+      print("  Address: ${addressController.text.isNotEmpty ? 'OK' : 'MISSING'}");
+      print("  Parent Phone: ${parentPhoneController.text.isNotEmpty ? 'OK' : 'MISSING'}");
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Please fill all required fields")),
+      );
+      return;
+    }
+
     await FirebaseFirestore.instance.collection("leave_requests").add({
 
       "studentId": user.uid,
@@ -152,6 +172,29 @@ class _LeaveApplicationState extends State<LeaveApplication> {
     );
 
     Navigator.pop(context);
+  }
+
+  void showSubmitConfirmation() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text("Confirm Submission"),
+        content: const Text("Are you sure you want to submit this leave application?"),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text("Cancel"),
+          ),
+          TextButton(
+            onPressed: () {
+              Navigator.pop(context);
+              submitApplication();
+            },
+            child: const Text("Submit"),
+          ),
+        ],
+      ),
+    );
   }
 
   @override
@@ -247,7 +290,7 @@ class _LeaveApplicationState extends State<LeaveApplication> {
                   const SizedBox(height: 30),
 
                   ElevatedButton(
-                    onPressed: submitApplication,
+                    onPressed: showSubmitConfirmation,
                     child: const Text("Submit Application"),
                   ),
 

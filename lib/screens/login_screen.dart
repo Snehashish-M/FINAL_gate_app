@@ -7,7 +7,7 @@ import 'warden_dashboard.dart';
 import 'profile_setup.dart';
 
 const List<String> wardenEmails = [
-  "warden1@nitgoa.ac.in",
+  "23ece1032@nitgoa.ac.in",
   "warden2@nitgoa.ac.in",
   "warden3@nitgoa.ac.in",
 ];
@@ -114,11 +114,10 @@ class LoginScreen extends StatelessWidget {
           (data["roomNumber"] as String).isNotEmpty;
       bool hasPhone = data["phone"] != null &&
           (data["phone"] as String).isNotEmpty;
-      bool hasPhoto = data["photo"] != null &&
-          (data["photo"] as String).isNotEmpty;
 
+      // Photo is now optional
       return hasRollNumber && hasDegree && hasHostel &&
-          hasRoomNumber && hasPhone && hasPhoto;
+          hasRoomNumber && hasPhone;
     } catch (e) {
       print("Error checking profile: $e");
       return false;

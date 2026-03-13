@@ -1,10 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:intl/intl.dart';
 
 class WardenDashboard extends StatelessWidget {
   const WardenDashboard({super.key});
 
-  Future approveRequest(DocumentSnapshot request) async {
+  Future approveRequest(BuildContext context, DocumentSnapshot request) async {
 
     DocumentReference passRef =
         FirebaseFirestore.instance.collection("gate_passes").doc();
@@ -42,7 +43,7 @@ class WardenDashboard extends StatelessWidget {
 
   }
 
-  Future rejectRequest(DocumentSnapshot request) async {
+  Future rejectRequest(BuildContext context, DocumentSnapshot request) async {
 
     await FirebaseFirestore.instance
         .collection("leave_requests")
@@ -51,6 +52,106 @@ class WardenDashboard extends StatelessWidget {
       "status": "rejected"
     });
 
+  }
+
+  void showApproveConfirmation(BuildContext context, DocumentSnapshot request) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text("Confirm Approval"),
+        content: Text("Approve leave for ${request["name"]}?"),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text("Cancel"),
+          ),
+          TextButton(
+            onPressed: () {
+              Navigator.pop(context);
+              approveRequest(context, request);
+            },
+            child: const Text("Approve"),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void showRejectConfirmation(BuildContext context, DocumentSnapshot request) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text("Confirm Rejection"),
+        content: Text("Reject leave for ${request["name"]}?"),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text("Cancel"),
+          ),
+          TextButton(
+            onPressed: () {
+              Navigator.pop(context);
+              rejectRequest(context, request);
+            },
+            child: const Text("Reject"),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void showLeaveDetails(BuildContext context, DocumentSnapshot request) {
+    DateTime? leavingDate;
+    DateTime? returnDate;
+
+    try {
+      if (request["leavingDate"] is Timestamp) {
+        leavingDate = (request["leavingDate"] as Timestamp).toDate();
+      }
+      if (request["returnDate"] is Timestamp) {
+        returnDate = (request["returnDate"] as Timestamp).toDate();
+      }
+    } catch (e) {
+      print("Error parsing dates: $e");
+    }
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text("Leave Application Details"),
+        content: SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text("Name: ${request["name"]}"),
+              Text("Roll Number: ${request["rollNumber"]}"),
+              Text("Degree: ${request["degree"]}"),
+              Text("Hostel: ${request["hostel"]}"),
+              Text("Room: ${request["roomNumber"]}"),
+              Text("Phone: ${request["phone"]}"),
+              const SizedBox(height: 10),
+              if (leavingDate != null)
+                Text("Leaving Date: ${DateFormat('yyyy-MM-dd').format(leavingDate)}"),
+              if (returnDate != null)
+                Text("Return Date: ${DateFormat('yyyy-MM-dd').format(returnDate)}"),
+              Text("Duration: ${request["durationDays"]} days"),
+              const SizedBox(height: 10),
+              Text("Mode of Transport: ${request["modeOfTransport"]}"),
+              Text("Purpose: ${request["purpose"]}"),
+              Text("Address During Leave: ${request["addressDuringLeave"]}"),
+              Text("Parent Phone: ${request["parentPhone"]}"),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text("Close"),
+          ),
+        ],
+      ),
+    );
   }
 
   @override
@@ -89,57 +190,60 @@ class WardenDashboard extends StatelessWidget {
 
               var request = docs[index];
 
-              return Card(
+              return GestureDetector(
+                onTap: () => showLeaveDetails(context, request),
+                child: Card(
 
-                margin: const EdgeInsets.all(10),
+                  margin: const EdgeInsets.all(10),
 
-                child: Padding(
-                  padding: const EdgeInsets.all(15),
+                  child: Padding(
+                    padding: const EdgeInsets.all(15),
 
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
 
-                    children: [
+                      children: [
 
-                      Text("Name: ${request["name"]}"),
-                      Text("Roll: ${request["rollNumber"]}"),
-                      Text("Degree: ${request["degree"]}"),
-                      Text("Hostel: ${request["hostel"]}"),
-                      Text("Room: ${request["roomNumber"]}"),
+                        Text("Name: ${request["name"]}"),
+                        Text("Roll: ${request["rollNumber"]}"),
+                        Text("Degree: ${request["degree"]}"),
+                        Text("Hostel: ${request["hostel"]}"),
+                        Text("Room: ${request["roomNumber"]}"),
 
-                      const SizedBox(height: 10),
+                        const SizedBox(height: 10),
 
-                      Text("Purpose: ${request["purpose"]}"),
+                        Text("Purpose: ${request["purpose"]}"),
 
-                      const SizedBox(height: 10),
+                        const SizedBox(height: 10),
 
-                      Row(
+                        Row(
 
-                        children: [
+                          children: [
 
-                          ElevatedButton(
-                            onPressed: () {
-                              approveRequest(request);
-                            },
-                            child: const Text("Approve"),
-                          ),
+                            ElevatedButton(
+                              onPressed: () {
+                                showApproveConfirmation(context, request);
+                              },
+                              child: const Text("Approve"),
+                            ),
 
-                          const SizedBox(width: 10),
+                            const SizedBox(width: 10),
 
-                          ElevatedButton(
-                            onPressed: () {
-                              rejectRequest(request);
-                            },
-                            child: const Text("Reject"),
-                          ),
+                            ElevatedButton(
+                              onPressed: () {
+                                showRejectConfirmation(context, request);
+                              },
+                              child: const Text("Reject"),
+                            ),
 
-                        ],
-                      )
+                          ],
+                        )
 
-                    ],
+                      ],
+                    ),
                   ),
-                ),
 
+                ),
               );
 
             },
