@@ -45,6 +45,14 @@ class _DayScholarState extends State<DayScholar> {
 
     if (userData == null) return;
 
+    // Validate place field
+    if (placeController.text.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Please enter where you are coming from")),
+      );
+      return;
+    }
+
     User? user = FirebaseAuth.instance.currentUser;
 
     if (user == null) return;

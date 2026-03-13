@@ -44,6 +44,14 @@ class _HostelExitState extends State<HostelExit> {
 
     if (userData == null) return;
 
+    // Validate destination field
+    if (destinationController.text.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Please enter a destination")),
+      );
+      return;
+    }
+
     User? user = FirebaseAuth.instance.currentUser;
 
     if (user == null) return;
