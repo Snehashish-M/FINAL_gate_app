@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:google_sign_in/google_sign_in.dart';
 
 import 'day_scholar.dart';
 import 'hostel_exit.dart';
 import 'leave_application.dart';
 import 'leave_status.dart';
 import 'profile_setup.dart';
+import 'login_screen.dart';
 
 class StudentDashboard extends StatelessWidget {
   const StudentDashboard({super.key});
@@ -25,15 +27,22 @@ class StudentDashboard extends StatelessWidget {
             icon: const Icon(Icons.logout),
             onPressed: () async {
 
+              await GoogleSignIn().signOut();
               await FirebaseAuth.instance.signOut();
 
-              Navigator.pop(context);
+              if (!context.mounted) return;
+              Navigator.pushAndRemoveUntil(
+                context,
+                MaterialPageRoute(builder: (context) => const LoginScreen()),
+                (route) => false,
+              );
 
             },
           )
 
         ],
       ),
+
 
       body: Center(
         child: Column(

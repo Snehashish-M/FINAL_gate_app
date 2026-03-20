@@ -1,6 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:google_sign_in/google_sign_in.dart';
 import 'package:intl/intl.dart';
+
+import 'login_screen.dart';
 
 class WardenDashboard extends StatelessWidget {
   const WardenDashboard({super.key});
@@ -112,7 +116,7 @@ class WardenDashboard extends StatelessWidget {
         returnDate = (request["returnDate"] as Timestamp).toDate();
       }
     } catch (e) {
-      print("Error parsing dates: $e");
+      debugPrint("Error parsing dates: $e");
     }
 
     showDialog(
@@ -161,6 +165,21 @@ class WardenDashboard extends StatelessWidget {
 
       appBar: AppBar(
         title: const Text("Warden Dashboard"),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.logout),
+            onPressed: () async {
+              await GoogleSignIn().signOut();
+              await FirebaseAuth.instance.signOut();
+              if (!context.mounted) return;
+              Navigator.pushAndRemoveUntil(
+                context,
+                MaterialPageRoute(builder: (context) => const LoginScreen()),
+                (route) => false,
+              );
+            },
+          ),
+        ],
       ),
 
       body: StreamBuilder(

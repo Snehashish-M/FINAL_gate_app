@@ -1,61 +1,112 @@
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:google_sign_in/google_sign_in.dart';
 
 import 'student_dashboard.dart';
 import 'warden_dashboard.dart';
 import 'profile_setup.dart';
-
-const List<String> wardenEmails = [
-  "23ece1032@nitgoa.ac.in",
-  "warden2@nitgoa.ac.in",
-  "warden3@nitgoa.ac.in",
-];
 
 class LoginScreen extends StatelessWidget {
   const LoginScreen({super.key});
 
   Future<void> signInWithGoogle(BuildContext context) async {
     try {
-      GoogleAuthProvider googleProvider = GoogleAuthProvider();
+      User? user;
 
-      googleProvider.setCustomParameters({
-        "hd": "nitgoa.ac.in"
-      });
+      if (kIsWeb) {
+        // Web: Use signInWithPopup
+        GoogleAuthProvider googleProvider = GoogleAuthProvider();
+        googleProvider.setCustomParameters({
+          "hd": "nitgoa.ac.in"
+        });
+        await FirebaseAuth.instance.signInWithPopup(googleProvider);
+        user = FirebaseAuth.instance.currentUser;
 
-      await FirebaseAuth.instance.signInWithPopup(googleProvider);
+        // Enforce domain check on web (hd param is only a hint)
+        if (user != null && !(user.email ?? "").endsWith("@nitgoa.ac.in")) {
+          await FirebaseAuth.instance.signOut();
+          if (!context.mounted) return;
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text("Please use your NIT Goa email (@nitgoa.ac.in)")),
+          );
+          return;
+        }
+      } else {
+        // Mobile: Use GoogleSignIn
+        final GoogleSignInAccount? googleUser = await GoogleSignIn(
+          scopes: ['email', 'profile'],
+        ).signIn();
 
-      User? user = FirebaseAuth.instance.currentUser;
+        if (googleUser == null) {
+          debugPrint("Google sign-in cancelled");
+          return;
+        }
+
+        // Check if email is from NIT Goa domain
+        if (!googleUser.email.endsWith("@nitgoa.ac.in")) {
+          // Clear cached Google account so picker shows again next time
+          await GoogleSignIn().signOut();
+          if (!context.mounted) return;
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text("Please use your NIT Goa email (@nitgoa.ac.in)")),
+          );
+          return;
+        }
+
+        final GoogleSignInAuthentication googleAuth = await googleUser.authentication;
+
+        final credential = GoogleAuthProvider.credential(
+          accessToken: googleAuth.accessToken,
+          idToken: googleAuth.idToken,
+        );
+
+        await FirebaseAuth.instance.signInWithCredential(credential);
+        user = FirebaseAuth.instance.currentUser;
+      }
 
       if (user != null) {
+        // Read existing user doc to check if role is already set
+        var existingDoc = await FirebaseFirestore.instance
+            .collection("users")
+            .doc(user.uid)
+            .get();
+
+        String existingRole = "";
+        if (existingDoc.exists && existingDoc.data() != null) {
+          existingRole = existingDoc.data()!["role"] ?? "";
+        }
+
+        // Set user data; only set role to "student" if no role exists yet
+        Map<String, dynamic> userData = {
+          "name": user.displayName,
+          "email": user.email,
+          "createdAt": Timestamp.now(),
+        };
+
+        if (existingRole.isEmpty) {
+          userData["role"] = "student";
+        }
 
         await FirebaseFirestore.instance
             .collection("users")
             .doc(user.uid)
-            .set({
-          "name": user.displayName,
-          "email": user.email,
-          "role": "student",
-          "createdAt": Timestamp.now(),
-        }, SetOptions(merge: true));
+            .set(userData, SetOptions(merge: true));
 
-        String email = user.email ?? "";
+        // Determine role from Firestore (use existing role, or default "student")
+        String role = existingRole.isNotEmpty ? existingRole : "student";
 
-        // Check if we should still use the context
         if (!context.mounted) return;
 
-        if (wardenEmails.contains(email)) {
-
-          if (!context.mounted) return;
+        if (role == "warden") {
           Navigator.pushReplacement(
             context,
             MaterialPageRoute(
               builder: (context) => const WardenDashboard(),
             ),
           );
-
         } else {
-
           // Check if student profile is complete
           bool isProfileComplete = await checkProfileCompletion(user.uid);
 
@@ -76,13 +127,15 @@ class LoginScreen extends StatelessWidget {
               ),
             );
           }
-
         }
-
       }
-
     } catch (e) {
-      print("Login error: $e");
+      debugPrint("Login error: $e");
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("Login failed: ${e.toString()}")),
+        );
+      }
     }
   }
 
@@ -119,7 +172,7 @@ class LoginScreen extends StatelessWidget {
       return hasRollNumber && hasDegree && hasHostel &&
           hasRoomNumber && hasPhone;
     } catch (e) {
-      print("Error checking profile: $e");
+      debugPrint("Error checking profile: $e");
       return false;
     }
   }

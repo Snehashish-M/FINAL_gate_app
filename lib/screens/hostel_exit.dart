@@ -17,11 +17,18 @@ class _HostelExitState extends State<HostelExit> {
   Map<String, dynamic>? userData;
 
   String? qrData;
+  bool _isLoading = false;
 
   @override
   void initState() {
     super.initState();
     loadUserProfile();
+  }
+
+  @override
+  void dispose() {
+    destinationController.dispose();
+    super.dispose();
   }
 
   Future loadUserProfile() async {
@@ -30,14 +37,23 @@ class _HostelExitState extends State<HostelExit> {
 
     if (user == null) return;
 
-    var doc = await FirebaseFirestore.instance
-        .collection("users")
-        .doc(user.uid)
-        .get();
+    try {
+      var doc = await FirebaseFirestore.instance
+          .collection("users")
+          .doc(user.uid)
+          .get();
 
-    setState(() {
-      userData = doc.data();
-    });
+      setState(() {
+        userData = doc.data();
+      });
+    } catch (e) {
+      debugPrint("Error loading user profile: $e");
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("Error loading profile: ${e.toString()}")),
+        );
+      }
+    }
   }
 
   Future generateQR() async {
@@ -56,35 +72,58 @@ class _HostelExitState extends State<HostelExit> {
 
     if (user == null) return;
 
-    DocumentReference passRef =
-        FirebaseFirestore.instance.collection("gate_passes").doc();
-
-    await passRef.set({
-
-      "studentId": user.uid,
-
-      "name": userData!["name"],
-      "rollNumber": userData!["rollNumber"],
-      "degree": userData!["degree"],
-      "hostel": userData!["hostel"],
-      "roomNumber": userData!["roomNumber"],
-      "phone": userData!["phone"],
-
-      "destination": destinationController.text,
-
-      "type": "hostel",
-
-      "status": "active",
-
-      "scanCount": 0,
-
-      "createdAt": Timestamp.now()
-
-    });
-
     setState(() {
-      qrData = passRef.id;
+      _isLoading = true;
     });
+
+    try {
+      DocumentReference passRef =
+          FirebaseFirestore.instance.collection("gate_passes").doc();
+
+      await passRef.set({
+
+        "studentId": user.uid,
+
+        "name": userData!["name"],
+        "rollNumber": userData!["rollNumber"],
+        "degree": userData!["degree"],
+        "hostel": userData!["hostel"],
+        "roomNumber": userData!["roomNumber"],
+        "phone": userData!["phone"],
+
+        "destination": destinationController.text,
+
+        "type": "hostel",
+
+        "status": "active",
+
+        "scanCount": 0,
+
+        "createdAt": Timestamp.now()
+
+      });
+
+      setState(() {
+        qrData = passRef.id;
+        _isLoading = false;
+      });
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("QR Code generated successfully")),
+        );
+      }
+    } catch (e) {
+      debugPrint("Error generating QR: $e");
+      setState(() {
+        _isLoading = false;
+      });
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("Error: ${e.toString()}")),
+        );
+      }
+    }
   }
 
   @override
@@ -114,8 +153,14 @@ class _HostelExitState extends State<HostelExit> {
                   const SizedBox(height: 30),
 
                   ElevatedButton(
-                    onPressed: generateQR,
-                    child: const Text("Generate QR"),
+                    onPressed: _isLoading ? null : generateQR,
+                    child: _isLoading
+                        ? const SizedBox(
+                            height: 20,
+                            width: 20,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Text("Generate QR"),
                   ),
 
                   const SizedBox(height: 40),

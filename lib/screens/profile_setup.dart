@@ -34,30 +34,49 @@ class _ProfileSetupState extends State<ProfileSetup> {
     loadProfile();
   }
 
+  @override
+  void dispose() {
+    rollController.dispose();
+    degreeController.dispose();
+    hostelController.dispose();
+    roomController.dispose();
+    phoneController.dispose();
+    super.dispose();
+  }
+
   Future loadProfile() async {
 
     User? user = FirebaseAuth.instance.currentUser;
 
     if (user == null) return;
 
-    var doc = await FirebaseFirestore.instance
-        .collection("users")
-        .doc(user.uid)
-        .get();
+    try {
+      var doc = await FirebaseFirestore.instance
+          .collection("users")
+          .doc(user.uid)
+          .get();
 
-    if (doc.exists) {
+      if (doc.exists) {
 
-      var data = doc.data()!;
+        var data = doc.data()!;
 
-      rollController.text = data["rollNumber"] ?? "";
-      degreeController.text = data["degree"] ?? "";
-      hostelController.text = data["hostel"] ?? "";
-      roomController.text = data["roomNumber"] ?? "";
-      phoneController.text = data["phone"] ?? "";
+        rollController.text = data["rollNumber"] ?? "";
+        degreeController.text = data["degree"] ?? "";
+        hostelController.text = data["hostel"] ?? "";
+        roomController.text = data["roomNumber"] ?? "";
+        phoneController.text = data["phone"] ?? "";
 
-      existingPhoto = data["photo"];
+        existingPhoto = data["photo"];
 
-      setState(() {});
+        setState(() {});
+      }
+    } catch (e) {
+      debugPrint("Error loading profile: $e");
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("Error loading profile: ${e.toString()}")),
+        );
+      }
     }
   }
 
@@ -78,25 +97,12 @@ class _ProfileSetupState extends State<ProfileSetup> {
 
   Future saveProfile() async {
 
-    print("=== PROFILE SAVE STARTED ===");
-
     User? user = FirebaseAuth.instance.currentUser;
 
-    print("User: $user");
     if (user == null) {
-      print("ERROR: No user found");
+      debugPrint("ERROR: No user found");
       return;
     }
-
-    // Validate all required fields
-    print("Validating fields...");
-    print("Roll: ${rollController.text}");
-    print("Degree: ${degreeController.text}");
-    print("Hostel: ${hostelController.text}");
-    print("Room: ${roomController.text}");
-    print("Phone: ${phoneController.text}");
-    print("Image bytes: ${_imageBytes != null ? 'YES' : 'NO'}");
-    print("Existing photo: $existingPhoto");
 
     if (rollController.text.isEmpty ||
         degreeController.text.isEmpty ||
@@ -104,7 +110,6 @@ class _ProfileSetupState extends State<ProfileSetup> {
         roomController.text.isEmpty ||
         phoneController.text.isEmpty) {
 
-      print("ERROR: Validation failed");
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text("Please fill all required fields")),
@@ -112,17 +117,7 @@ class _ProfileSetupState extends State<ProfileSetup> {
       return;
     }
 
-    // On first time setup, photo is optional. On edit, photo is also optional
-    print("Photo check passed (photo is optional)");
-
-    print("Validation passed");
-    print("Mounted: $mounted");
-
-    // Show loading dialog
-    if (!mounted) {
-      print("ERROR: Not mounted before showing dialog");
-      return;
-    }
+    if (!mounted) return;
 
     BuildContext? dialogContext;
 
@@ -130,7 +125,6 @@ class _ProfileSetupState extends State<ProfileSetup> {
       context: context,
       barrierDismissible: false,
       builder: (ctx) {
-        print("Dialog builder called");
         dialogContext = ctx;
         return const AlertDialog(
           content: Row(
@@ -144,51 +138,33 @@ class _ProfileSetupState extends State<ProfileSetup> {
       },
     );
 
-    print("Dialog shown");
-
     try {
       String imageUrl = existingPhoto ?? "";
-      print("Initial image URL: $imageUrl");
 
       if (_imageBytes != null) {
-        print("Uploading image...");
         try {
           final ref = FirebaseStorage.instance
               .ref()
               .child("profile_photos")
               .child("${user.uid}.jpg");
 
-          print("Firebase Storage ref created: ${ref.fullPath}");
-          print("Image size: ${_imageBytes!.length} bytes");
+          // Add content-type metadata for better Storage compatibility
+          final metadata = SettableMetadata(contentType: 'image/jpeg');
 
-          print("Attempting upload...");
-          final task = ref.putData(_imageBytes!);
-
-          // Listen to upload progress
-          task.snapshotEvents.listen((event) {
-            print("Upload progress: ${event.bytesTransferred}/${event.totalBytes}");
-          });
+          final task = ref.putData(_imageBytes!, metadata);
 
           await task.timeout(
             const Duration(seconds: 60),
           );
 
-          print("Image uploaded successfully");
-
           imageUrl = await ref.getDownloadURL();
-          print("Image URL obtained: $imageUrl");
+          debugPrint("Image uploaded successfully");
         } catch (uploadError) {
-          print("ERROR uploading image: $uploadError");
-          print("Error type: ${uploadError.runtimeType}");
+          debugPrint("Error uploading image: $uploadError");
           // Don't throw - allow profile to save without photo
-          print("Continuing without photo...");
-          imageUrl = ""; // Set empty photo URL
+          imageUrl = existingPhoto ?? "";
         }
       }
-
-      print("Saving to Firestore...");
-      print("Document path: users/${user.uid}");
-      print("Data: {rollNumber: ${rollController.text}, degree: ${degreeController.text}, hostel: ${hostelController.text}, roomNumber: ${roomController.text}, phone: ${phoneController.text}, photo: $imageUrl}");
 
       await FirebaseFirestore.instance
           .collection("users")
@@ -204,19 +180,12 @@ class _ProfileSetupState extends State<ProfileSetup> {
 
       }, SetOptions(merge: true));
 
-      print("Firestore save completed");
-
       // Close loading dialog using the dialogContext
       if (dialogContext != null && dialogContext!.mounted) {
-        print("Closing dialog...");
         Navigator.of(dialogContext!).pop();
-        print("Dialog closed");
-      } else {
-        print("ERROR: Dialog context not available");
       }
 
       if (mounted) {
-        print("Showing success message");
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text("Profile Saved Successfully")),
         );
@@ -224,7 +193,6 @@ class _ProfileSetupState extends State<ProfileSetup> {
 
       // If first time setup, navigate to StudentDashboard
       if (widget.isFirstTime && mounted) {
-        print("First time setup - navigating to StudentDashboard");
         Navigator.pushReplacement(
           context,
           MaterialPageRoute(
@@ -232,14 +200,10 @@ class _ProfileSetupState extends State<ProfileSetup> {
           ),
         );
       } else if (mounted) {
-        print("Editing existing profile - popping back");
         Navigator.pop(context);
       }
-      print("=== PROFILE SAVE COMPLETED SUCCESSFULLY ===");
     } catch (e) {
-      print("=== ERROR IN PROFILE SAVE ===");
-      print("Exception: $e");
-      print("Exception type: ${e.runtimeType}");
+      debugPrint("Error saving profile: $e");
 
       // Close loading dialog
       if (dialogContext != null && dialogContext!.mounted) {
@@ -256,8 +220,6 @@ class _ProfileSetupState extends State<ProfileSetup> {
 
   @override
   Widget build(BuildContext context) {
-
-    print("=== PROFILE SETUP WIDGET BUILDING ===");
 
     return Scaffold(
 
@@ -352,10 +314,7 @@ class _ProfileSetupState extends State<ProfileSetup> {
             const SizedBox(height: 30),
 
             ElevatedButton(
-              onPressed: () {
-                print("=== SAVE BUTTON TAPPED ===");
-                saveProfile();
-              },
+              onPressed: saveProfile,
               child: const Text("Save Profile"),
             ),
 

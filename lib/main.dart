@@ -1,7 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'firebase_options.dart';
 import 'package:nit_goa_gate_app/screens/login_screen.dart';
+import 'package:nit_goa_gate_app/screens/student_dashboard.dart';
+import 'package:nit_goa_gate_app/screens/warden_dashboard.dart';
+import 'package:nit_goa_gate_app/screens/profile_setup.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -25,24 +30,116 @@ class MyApp extends StatelessWidget {
     return const MaterialApp(
       title: 'NIT Goa Gate System',
       debugShowCheckedModeBanner: false,
-      home: LoginScreen(),
+      home: AuthGate(),
     );
   }
 }
 
-class HomePage extends StatelessWidget {
-  const HomePage({super.key});
+/// Checks if user is already signed in and routes accordingly.
+/// If signed in → dashboard. If not → login screen.
+class AuthGate extends StatefulWidget {
+  const AuthGate({super.key});
+
+  @override
+  State<AuthGate> createState() => _AuthGateState();
+}
+
+class _AuthGateState extends State<AuthGate> {
+  bool _isLoading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _checkAuthState();
+  }
+
+  Future<void> _checkAuthState() async {
+    User? user = FirebaseAuth.instance.currentUser;
+
+    if (user == null) {
+      // Not signed in — show login screen
+      if (!mounted) return;
+      setState(() {
+        _isLoading = false;
+      });
+      return;
+    }
+
+    // User is signed in — determine where to go
+    try {
+      var doc = await FirebaseFirestore.instance
+          .collection("users")
+          .doc(user.uid)
+          .get();
+
+      if (!mounted) return;
+
+      if (!doc.exists || doc.data() == null) {
+        // User doc missing — go to login
+        setState(() {
+          _isLoading = false;
+        });
+        return;
+      }
+
+      var data = doc.data()!;
+      String role = data["role"] ?? "student";
+
+      if (role == "warden") {
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (context) => const WardenDashboard()),
+        );
+      } else {
+        // Check if profile is complete
+        bool hasRollNumber = data["rollNumber"] != null &&
+            (data["rollNumber"] as String).isNotEmpty;
+        bool hasDegree = data["degree"] != null &&
+            (data["degree"] as String).isNotEmpty;
+        bool hasHostel = data["hostel"] != null &&
+            (data["hostel"] as String).isNotEmpty;
+        bool hasRoomNumber = data["roomNumber"] != null &&
+            (data["roomNumber"] as String).isNotEmpty;
+        bool hasPhone = data["phone"] != null &&
+            (data["phone"] as String).isNotEmpty;
+
+        bool isProfileComplete = hasRollNumber && hasDegree && hasHostel &&
+            hasRoomNumber && hasPhone;
+
+        if (isProfileComplete) {
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(builder: (context) => const StudentDashboard()),
+          );
+        } else {
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(
+              builder: (context) => const ProfileSetup(isFirstTime: true),
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      debugPrint("Auth gate error: $e");
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
-    return const Scaffold(
-      body: Center(
-        child: Text(
-          "App Started Successfully",
-          style: TextStyle(fontSize: 22),
+    if (_isLoading) {
+      return const Scaffold(
+        body: Center(
+          child: CircularProgressIndicator(),
         ),
-      ),
-    );
+      );
+    }
+
+    return const LoginScreen();
   }
 }
-

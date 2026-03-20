@@ -34,6 +34,16 @@ class _LeaveApplicationState extends State<LeaveApplication> {
     loadUserProfile();
   }
 
+  @override
+  void dispose() {
+    floorController.dispose();
+    transportController.dispose();
+    purposeController.dispose();
+    addressController.dispose();
+    parentPhoneController.dispose();
+    super.dispose();
+  }
+
   Future loadUserProfile() async {
 
     User? user = FirebaseAuth.instance.currentUser;
@@ -121,13 +131,7 @@ class _LeaveApplicationState extends State<LeaveApplication> {
         transportController.text.isEmpty ||
         addressController.text.isEmpty ||
         parentPhoneController.text.isEmpty) {
-      print("Validation failed:");
-      print("  Leaving Date: ${leavingDate != null ? 'OK' : 'MISSING'}");
-      print("  Return Date: ${returnDate != null ? 'OK' : 'MISSING'}");
-      print("  Purpose: ${purposeController.text.isNotEmpty ? 'OK' : 'MISSING'}");
-      print("  Transport: ${transportController.text.isNotEmpty ? 'OK' : 'MISSING'}");
-      print("  Address: ${addressController.text.isNotEmpty ? 'OK' : 'MISSING'}");
-      print("  Parent Phone: ${parentPhoneController.text.isNotEmpty ? 'OK' : 'MISSING'}");
+      debugPrint("Validation failed");
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text("Please fill all required fields")),
       );

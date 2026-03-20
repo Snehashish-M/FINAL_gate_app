@@ -19,7 +19,7 @@ class LeaveStatus extends StatelessWidget {
         returnDate = (leaveRequest["returnDate"] as Timestamp).toDate();
       }
     } catch (e) {
-      print("Error parsing dates: $e");
+      debugPrint("Error parsing dates: $e");
     }
 
     showDialog(
@@ -134,7 +134,7 @@ class LeaveStatus extends StatelessWidget {
                   returnDate = (leaveRequest["returnDate"] as Timestamp).toDate();
                 }
               } catch (e) {
-                print("Error parsing dates: $e");
+                debugPrint("Error parsing dates: $e");
               }
 
               String purpose = leaveRequest["purpose"] ?? "N/A";
