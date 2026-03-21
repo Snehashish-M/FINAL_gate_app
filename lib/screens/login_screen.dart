@@ -79,9 +79,22 @@ class LoginScreen extends StatelessWidget {
         }
 
         // Set user data; only set role to "student" if no role exists yet
+        // Extract roll number from email prefix (e.g. 23ece1031 from 23ece1031@nitgoa.ac.in)
+        String email = user.email ?? "";
+        String rollNumber = email.contains("@") ? email.split("@")[0] : "";
+
+        // Extract name from display name by removing roll number + underscore prefix
+        // e.g. "23ece1031_SPARSH KESHAV RAUL" → "SPARSH KESHAV RAUL"
+        String displayName = user.displayName ?? "";
+        String name = displayName;
+        if (displayName.contains("_")) {
+          name = displayName.substring(displayName.indexOf("_") + 1).trim();
+        }
+
         Map<String, dynamic> userData = {
-          "name": user.displayName,
-          "email": user.email,
+          "name": name,
+          "email": email,
+          "rollNumber": rollNumber,
           "createdAt": Timestamp.now(),
         };
 

@@ -17,14 +17,18 @@ class ProfileSetup extends StatefulWidget {
 
 class _ProfileSetupState extends State<ProfileSetup> {
 
-  final rollController = TextEditingController();
+  // Read-only fields (auto-filled from Google account + email)
+  String _name = "";
+  String _rollNumber = "";
+
+  // Editable fields
   final degreeController = TextEditingController();
   final hostelController = TextEditingController();
   final roomController = TextEditingController();
   final phoneController = TextEditingController();
 
   Uint8List? _imageBytes;
-  String? existingPhotoBase64; // base64 string from Firestore
+  String? existingPhotoBase64;
   String _photoStatus = "";
 
   final picker = ImagePicker();
@@ -37,7 +41,6 @@ class _ProfileSetupState extends State<ProfileSetup> {
 
   @override
   void dispose() {
-    rollController.dispose();
     degreeController.dispose();
     hostelController.dispose();
     roomController.dispose();
@@ -61,7 +64,9 @@ class _ProfileSetupState extends State<ProfileSetup> {
 
         var data = doc.data()!;
 
-        rollController.text = data["rollNumber"] ?? "";
+        _name = data["name"] ?? user.displayName ?? "";
+        _rollNumber = data["rollNumber"] ?? "";
+
         degreeController.text = data["degree"] ?? "";
         hostelController.text = data["hostel"] ?? "";
         roomController.text = data["roomNumber"] ?? "";
@@ -83,7 +88,6 @@ class _ProfileSetupState extends State<ProfileSetup> {
 
   Future pickImage() async {
 
-    // Compress: max 200x200 pixels, 70% quality → keeps size under 50KB
     final picked = await picker.pickImage(
       source: ImageSource.gallery,
       maxWidth: 200,
@@ -104,7 +108,6 @@ class _ProfileSetupState extends State<ProfileSetup> {
     }
   }
 
-  /// Get the photo to display as bytes (from picked image or existing base64)
   Uint8List? _getDisplayBytes() {
     if (_imageBytes != null) return _imageBytes;
     if (existingPhotoBase64 != null && existingPhotoBase64!.isNotEmpty) {
@@ -127,8 +130,7 @@ class _ProfileSetupState extends State<ProfileSetup> {
       return;
     }
 
-    if (rollController.text.isEmpty ||
-        degreeController.text.isEmpty ||
+    if (degreeController.text.isEmpty ||
         hostelController.text.isEmpty ||
         roomController.text.isEmpty ||
         phoneController.text.isEmpty) {
@@ -162,7 +164,6 @@ class _ProfileSetupState extends State<ProfileSetup> {
     );
 
     try {
-      // Encode photo as base64 string to store directly in Firestore
       String photoBase64 = existingPhotoBase64 ?? "";
 
       if (_imageBytes != null) {
@@ -174,7 +175,6 @@ class _ProfileSetupState extends State<ProfileSetup> {
           .doc(user.uid)
           .set({
 
-        "rollNumber": rollController.text,
         "degree": degreeController.text,
         "hostel": hostelController.text,
         "roomNumber": roomController.text,
@@ -183,7 +183,6 @@ class _ProfileSetupState extends State<ProfileSetup> {
 
       }, SetOptions(merge: true));
 
-      // Close loading dialog
       if (dialogContext != null && dialogContext!.mounted) {
         Navigator.of(dialogContext!).pop();
       }
@@ -200,7 +199,6 @@ class _ProfileSetupState extends State<ProfileSetup> {
         );
       }
 
-      // If first time setup, navigate to StudentDashboard
       if (widget.isFirstTime && mounted) {
         Navigator.pushReplacement(
           context,
@@ -214,7 +212,6 @@ class _ProfileSetupState extends State<ProfileSetup> {
     } catch (e) {
       debugPrint("Error saving profile: $e");
 
-      // Close loading dialog
       if (dialogContext != null && dialogContext!.mounted) {
         Navigator.of(dialogContext!).pop();
       }
@@ -253,7 +250,7 @@ class _ProfileSetupState extends State<ProfileSetup> {
                   border: Border.all(color: const Color(0xFF1976D2)),
                 ),
                 child: const Text(
-                  "Complete your profile to access the student portal. All text fields are mandatory. Photo is optional.",
+                  "Complete your profile to access the student portal. Name and Roll Number are auto-filled from your college email.",
                   style: TextStyle(
                     color: Color(0xFF1976D2),
                     fontWeight: FontWeight.w500,
@@ -264,7 +261,7 @@ class _ProfileSetupState extends State<ProfileSetup> {
             if (widget.isFirstTime)
               const SizedBox(height: 20),
 
-            // Photo preview — centered circle
+            // Photo preview
             Center(
               child: Stack(
                 children: [
@@ -303,7 +300,6 @@ class _ProfileSetupState extends State<ProfileSetup> {
 
             const SizedBox(height: 8),
 
-            // Photo status text
             if (_photoStatus.isNotEmpty)
               Center(
                 child: Text(
@@ -320,11 +316,26 @@ class _ProfileSetupState extends State<ProfileSetup> {
 
             const SizedBox(height: 20),
 
+            // Read-only: Name (from Google account)
             TextField(
-              controller: rollController,
+              controller: TextEditingController(text: _name),
+              decoration: const InputDecoration(
+                labelText: "Name",
+                suffixIcon: Icon(Icons.lock_outline, size: 18),
+              ),
+              enabled: false,
+            ),
+
+            const SizedBox(height: 15),
+
+            // Read-only: Roll Number (from email prefix)
+            TextField(
+              controller: TextEditingController(text: _rollNumber),
               decoration: const InputDecoration(
                 labelText: "Roll Number",
+                suffixIcon: Icon(Icons.lock_outline, size: 18),
               ),
+              enabled: false,
             ),
 
             const SizedBox(height: 15),
