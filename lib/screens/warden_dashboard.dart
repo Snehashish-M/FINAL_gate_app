@@ -50,11 +50,23 @@ class WardenDashboard extends StatelessWidget {
       "degree": request["degree"],
       "hostel": request["hostel"],
       "roomNumber": request["roomNumber"],
+      "phone": request["phone"],
+      "photo": request["photo"] ?? "",
 
       "type": "leave",
 
+      "floor": request["floor"] ?? "",
+
       "leavingDate": request["leavingDate"],
       "returnDate": request["returnDate"],
+      "leavingTime": request["leavingTime"] ?? "",
+      "returnTime": request["returnTime"] ?? "",
+      "durationDays": request["durationDays"] ?? 0,
+
+      "modeOfTransport": request["modeOfTransport"] ?? "",
+      "purpose": request["purpose"] ?? "",
+      "addressDuringLeave": request["addressDuringLeave"] ?? "",
+      "parentPhone": request["parentPhone"] ?? "",
 
       "status": "active",
 
