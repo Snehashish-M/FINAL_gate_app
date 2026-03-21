@@ -1,9 +1,9 @@
+import 'dart:convert';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_storage/firebase_storage.dart';
 import 'student_dashboard.dart';
 
 class ProfileSetup extends StatefulWidget {
@@ -24,7 +24,8 @@ class _ProfileSetupState extends State<ProfileSetup> {
   final phoneController = TextEditingController();
 
   Uint8List? _imageBytes;
-  String? existingPhoto;
+  String? existingPhotoBase64; // base64 string from Firestore
+  String _photoStatus = "";
 
   final picker = ImagePicker();
 
@@ -66,7 +67,7 @@ class _ProfileSetupState extends State<ProfileSetup> {
         roomController.text = data["roomNumber"] ?? "";
         phoneController.text = data["phone"] ?? "";
 
-        existingPhoto = data["photo"];
+        existingPhotoBase64 = data["photo"];
 
         setState(() {});
       }
@@ -82,17 +83,39 @@ class _ProfileSetupState extends State<ProfileSetup> {
 
   Future pickImage() async {
 
-    final picked = await picker.pickImage(source: ImageSource.gallery);
+    // Compress: max 200x200 pixels, 70% quality → keeps size under 50KB
+    final picked = await picker.pickImage(
+      source: ImageSource.gallery,
+      maxWidth: 200,
+      maxHeight: 200,
+      imageQuality: 70,
+    );
 
     if (picked != null) {
 
       final bytes = await picked.readAsBytes();
+      final sizeKB = (bytes.length / 1024).toStringAsFixed(1);
 
       setState(() {
         _imageBytes = bytes;
+        _photoStatus = "Photo selected ✓ (${sizeKB}KB)";
       });
 
     }
+  }
+
+  /// Get the photo to display as bytes (from picked image or existing base64)
+  Uint8List? _getDisplayBytes() {
+    if (_imageBytes != null) return _imageBytes;
+    if (existingPhotoBase64 != null && existingPhotoBase64!.isNotEmpty) {
+      try {
+        return base64Decode(existingPhotoBase64!);
+      } catch (e) {
+        debugPrint("Error decoding photo: $e");
+        return null;
+      }
+    }
+    return null;
   }
 
   Future saveProfile() async {
@@ -139,31 +162,11 @@ class _ProfileSetupState extends State<ProfileSetup> {
     );
 
     try {
-      String imageUrl = existingPhoto ?? "";
+      // Encode photo as base64 string to store directly in Firestore
+      String photoBase64 = existingPhotoBase64 ?? "";
 
       if (_imageBytes != null) {
-        try {
-          final ref = FirebaseStorage.instance
-              .ref()
-              .child("profile_photos")
-              .child("${user.uid}.jpg");
-
-          // Add content-type metadata for better Storage compatibility
-          final metadata = SettableMetadata(contentType: 'image/jpeg');
-
-          final task = ref.putData(_imageBytes!, metadata);
-
-          await task.timeout(
-            const Duration(seconds: 60),
-          );
-
-          imageUrl = await ref.getDownloadURL();
-          debugPrint("Image uploaded successfully");
-        } catch (uploadError) {
-          debugPrint("Error uploading image: $uploadError");
-          // Don't throw - allow profile to save without photo
-          imageUrl = existingPhoto ?? "";
-        }
+        photoBase64 = base64Encode(_imageBytes!);
       }
 
       await FirebaseFirestore.instance
@@ -176,18 +179,24 @@ class _ProfileSetupState extends State<ProfileSetup> {
         "hostel": hostelController.text,
         "roomNumber": roomController.text,
         "phone": phoneController.text,
-        "photo": imageUrl,
+        "photo": photoBase64,
 
       }, SetOptions(merge: true));
 
-      // Close loading dialog using the dialogContext
+      // Close loading dialog
       if (dialogContext != null && dialogContext!.mounted) {
         Navigator.of(dialogContext!).pop();
       }
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text("Profile Saved Successfully")),
+          SnackBar(
+            content: Text(
+              photoBase64.isNotEmpty
+                  ? "Profile saved with photo ✓"
+                  : "Profile saved (no photo)",
+            ),
+          ),
         );
       }
 
@@ -221,6 +230,8 @@ class _ProfileSetupState extends State<ProfileSetup> {
   @override
   Widget build(BuildContext context) {
 
+    final displayBytes = _getDisplayBytes();
+
     return Scaffold(
 
       appBar: AppBar(
@@ -253,18 +264,59 @@ class _ProfileSetupState extends State<ProfileSetup> {
             if (widget.isFirstTime)
               const SizedBox(height: 20),
 
-            if (_imageBytes != null)
-              Image.memory(_imageBytes!, height: 120)
-
-            else if (existingPhoto != null && existingPhoto!.isNotEmpty)
-              Image.network(existingPhoto!, height: 120),
-
-            const SizedBox(height: 15),
-
-            ElevatedButton(
-              onPressed: pickImage,
-              child: const Text("Upload Photo"),
+            // Photo preview — centered circle
+            Center(
+              child: Stack(
+                children: [
+                  CircleAvatar(
+                    radius: 55,
+                    backgroundColor: Colors.grey[300],
+                    backgroundImage: displayBytes != null
+                        ? MemoryImage(displayBytes)
+                        : null,
+                    child: displayBytes == null
+                        ? const Icon(Icons.person, size: 50, color: Colors.grey)
+                        : null,
+                  ),
+                  Positioned(
+                    bottom: 0,
+                    right: 0,
+                    child: GestureDetector(
+                      onTap: pickImage,
+                      child: Container(
+                        padding: const EdgeInsets.all(6),
+                        decoration: BoxDecoration(
+                          color: Theme.of(context).primaryColor,
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(
+                          Icons.camera_alt,
+                          color: Colors.white,
+                          size: 20,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
             ),
+
+            const SizedBox(height: 8),
+
+            // Photo status text
+            if (_photoStatus.isNotEmpty)
+              Center(
+                child: Text(
+                  _photoStatus,
+                  style: TextStyle(
+                    color: _photoStatus.contains("✗")
+                        ? Colors.red
+                        : Colors.green,
+                    fontWeight: FontWeight.w500,
+                    fontSize: 13,
+                  ),
+                ),
+              ),
 
             const SizedBox(height: 20),
 

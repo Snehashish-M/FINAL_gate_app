@@ -1,3 +1,5 @@
+import 'dart:convert';
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -9,8 +11,33 @@ import 'login_screen.dart';
 class WardenDashboard extends StatelessWidget {
   const WardenDashboard({super.key});
 
-  Future approveRequest(BuildContext context, DocumentSnapshot request) async {
+  /// Builds a CircleAvatar with the student's photo from base64, or a fallback icon
+  Widget _buildStudentAvatar(DocumentSnapshot request, {double radius = 25}) {
+    String? photoBase64;
+    try {
+      photoBase64 = request["photo"];
+    } catch (_) {}
 
+    Uint8List? photoBytes;
+    if (photoBase64 != null && photoBase64.isNotEmpty) {
+      try {
+        photoBytes = base64Decode(photoBase64);
+      } catch (e) {
+        debugPrint("Error decoding student photo: $e");
+      }
+    }
+
+    return CircleAvatar(
+      radius: radius,
+      backgroundColor: Colors.grey[300],
+      backgroundImage: photoBytes != null ? MemoryImage(photoBytes) : null,
+      child: photoBytes == null
+          ? Icon(Icons.person, size: radius, color: Colors.grey)
+          : null,
+    );
+  }
+
+  Future approveRequest(BuildContext context, DocumentSnapshot request) async {
     DocumentReference passRef =
         FirebaseFirestore.instance.collection("gate_passes").doc();
 
@@ -128,6 +155,11 @@ class WardenDashboard extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisSize: MainAxisSize.min,
             children: [
+              // Student photo
+              Center(
+                child: _buildStudentAvatar(request, radius: 40),
+              ),
+              const SizedBox(height: 15),
               Text("Name: ${request["name"]}"),
               Text("Roll Number: ${request["rollNumber"]}"),
               Text("Degree: ${request["degree"]}"),
@@ -223,11 +255,23 @@ class WardenDashboard extends StatelessWidget {
 
                       children: [
 
-                        Text("Name: ${request["name"]}"),
-                        Text("Roll: ${request["rollNumber"]}"),
-                        Text("Degree: ${request["degree"]}"),
-                        Text("Hostel: ${request["hostel"]}"),
-                        Text("Room: ${request["roomNumber"]}"),
+                        Row(
+                          children: [
+                            _buildStudentAvatar(request, radius: 25),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text("${request["name"]}",
+                                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                                  Text("Roll: ${request["rollNumber"]}"),
+                                  Text("${request["degree"]} • ${request["hostel"]} - ${request["roomNumber"]}"),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
 
                         const SizedBox(height: 10),
 

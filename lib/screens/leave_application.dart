@@ -148,6 +148,7 @@ class _LeaveApplicationState extends State<LeaveApplication> {
       "hostel": userData?["hostel"],
       "roomNumber": userData?["roomNumber"],
       "phone": userData?["phone"],
+      "photo": userData?["photo"] ?? "",
 
       "floor": floorController.text,
 
