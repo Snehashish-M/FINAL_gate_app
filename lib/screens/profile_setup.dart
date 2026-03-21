@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:nit_goa_gate_app/services/user_cache.dart';
 import 'student_dashboard.dart';
 
 class ProfileSetup extends StatefulWidget {
@@ -49,40 +50,27 @@ class _ProfileSetupState extends State<ProfileSetup> {
   }
 
   Future loadProfile() async {
+    // Try cache first, fallback to Firestore
+    var data = UserCache().profileData;
 
-    User? user = FirebaseAuth.instance.currentUser;
+    if (data == null) {
+      data = await UserCache().loadProfile();
+    }
 
-    if (user == null) return;
+    if (data != null) {
+      User? user = FirebaseAuth.instance.currentUser;
 
-    try {
-      var doc = await FirebaseFirestore.instance
-          .collection("users")
-          .doc(user.uid)
-          .get();
+      _name = data["name"] ?? user?.displayName ?? "";
+      _rollNumber = data["rollNumber"] ?? "";
 
-      if (doc.exists) {
+      degreeController.text = data["degree"] ?? "";
+      hostelController.text = data["hostel"] ?? "";
+      roomController.text = data["roomNumber"] ?? "";
+      phoneController.text = data["phone"] ?? "";
 
-        var data = doc.data()!;
+      existingPhotoBase64 = data["photo"];
 
-        _name = data["name"] ?? user.displayName ?? "";
-        _rollNumber = data["rollNumber"] ?? "";
-
-        degreeController.text = data["degree"] ?? "";
-        hostelController.text = data["hostel"] ?? "";
-        roomController.text = data["roomNumber"] ?? "";
-        phoneController.text = data["phone"] ?? "";
-
-        existingPhotoBase64 = data["photo"];
-
-        setState(() {});
-      }
-    } catch (e) {
-      debugPrint("Error loading profile: $e");
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text("Error loading profile: ${e.toString()}")),
-        );
-      }
+      setState(() {});
     }
   }
 
@@ -170,18 +158,21 @@ class _ProfileSetupState extends State<ProfileSetup> {
         photoBase64 = base64Encode(_imageBytes!);
       }
 
-      await FirebaseFirestore.instance
-          .collection("users")
-          .doc(user.uid)
-          .set({
-
+      Map<String, dynamic> profileData = {
         "degree": degreeController.text,
         "hostel": hostelController.text,
         "roomNumber": roomController.text,
         "phone": phoneController.text,
         "photo": photoBase64,
+      };
 
-      }, SetOptions(merge: true));
+      await FirebaseFirestore.instance
+          .collection("users")
+          .doc(user.uid)
+          .set(profileData, SetOptions(merge: true));
+
+      // Update the cache so other screens see the new data immediately
+      UserCache().updateCache(profileData);
 
       if (dialogContext != null && dialogContext!.mounted) {
         Navigator.of(dialogContext!).pop();

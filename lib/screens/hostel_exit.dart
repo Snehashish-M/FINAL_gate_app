@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:qr_flutter/qr_flutter.dart';
+import 'package:nit_goa_gate_app/services/user_cache.dart';
 
 class HostelExit extends StatefulWidget {
   const HostelExit({super.key});
@@ -22,7 +23,11 @@ class _HostelExitState extends State<HostelExit> {
   @override
   void initState() {
     super.initState();
-    loadUserProfile();
+    // Use cached profile — no Firestore read
+    userData = UserCache().profileData;
+    if (userData == null) {
+      _loadFromFirestore();
+    }
   }
 
   @override
@@ -31,28 +36,12 @@ class _HostelExitState extends State<HostelExit> {
     super.dispose();
   }
 
-  Future loadUserProfile() async {
-
-    User? user = FirebaseAuth.instance.currentUser;
-
-    if (user == null) return;
-
-    try {
-      var doc = await FirebaseFirestore.instance
-          .collection("users")
-          .doc(user.uid)
-          .get();
-
+  Future _loadFromFirestore() async {
+    var data = await UserCache().loadProfile();
+    if (mounted) {
       setState(() {
-        userData = doc.data();
+        userData = data;
       });
-    } catch (e) {
-      debugPrint("Error loading user profile: $e");
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text("Error loading profile: ${e.toString()}")),
-        );
-      }
     }
   }
 

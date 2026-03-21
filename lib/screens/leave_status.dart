@@ -4,8 +4,62 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:intl/intl.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 
-class LeaveStatus extends StatelessWidget {
+class LeaveStatus extends StatefulWidget {
   const LeaveStatus({super.key});
+
+  @override
+  State<LeaveStatus> createState() => _LeaveStatusState();
+}
+
+class _LeaveStatusState extends State<LeaveStatus> {
+
+  List<DocumentSnapshot> _leaveRequests = [];
+  bool _isLoading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _fetchLeaveRequests();
+  }
+
+  Future<void> _fetchLeaveRequests() async {
+    User? user = FirebaseAuth.instance.currentUser;
+    if (user == null) return;
+
+    setState(() {
+      _isLoading = true;
+    });
+
+    try {
+      var snapshot = await FirebaseFirestore.instance
+          .collection("leave_requests")
+          .where("studentId", isEqualTo: user.uid)
+          .get();
+
+      var docs = snapshot.docs;
+
+      // Sort by createdAt descending
+      docs.sort((a, b) {
+        Timestamp aTime = a["createdAt"] ?? Timestamp.now();
+        Timestamp bTime = b["createdAt"] ?? Timestamp.now();
+        return bTime.compareTo(aTime);
+      });
+
+      if (mounted) {
+        setState(() {
+          _leaveRequests = docs;
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      debugPrint("Error fetching leave requests: $e");
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
+    }
+  }
 
   void showLeaveDetails(BuildContext context, DocumentSnapshot leaveRequest) {
     DateTime? leavingDate;
@@ -79,212 +133,193 @@ class LeaveStatus extends StatelessWidget {
         title: const Text("Leave Application Status"),
       ),
 
-      body: StreamBuilder(
+      body: RefreshIndicator(
+        onRefresh: _fetchLeaveRequests,
+        child: _isLoading
+            ? const Center(child: CircularProgressIndicator())
+            : _leaveRequests.isEmpty
+                ? ListView(
+                    children: const [
+                      SizedBox(height: 200),
+                      Center(child: Text("No leave applications submitted")),
+                      SizedBox(height: 20),
+                      Center(
+                        child: Text(
+                          "Pull down to refresh",
+                          style: TextStyle(color: Colors.grey, fontSize: 13),
+                        ),
+                      ),
+                    ],
+                  )
+                : ListView.builder(
 
-        stream: FirebaseFirestore.instance
-            .collection("leave_requests")
-            .where("studentId", isEqualTo: user.uid)
-            .snapshots(),
+                    itemCount: _leaveRequests.length,
+                    padding: const EdgeInsets.all(10),
 
-        builder: (context, snapshot) {
+                    itemBuilder: (context, index) {
 
-          if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Center(child: CircularProgressIndicator());
-          }
+                      var leaveRequest = _leaveRequests[index];
+                      String status = leaveRequest["status"] ?? "pending";
 
-          if (snapshot.hasError) {
-            return Center(
-              child: Text("Error: ${snapshot.error}"),
-            );
-          }
+                      DateTime? leavingDate;
+                      DateTime? returnDate;
 
-          if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
-            return const Center(
-              child: Text("No leave applications submitted"),
-            );
-          }
+                      try {
+                        if (leaveRequest["leavingDate"] is Timestamp) {
+                          leavingDate = (leaveRequest["leavingDate"] as Timestamp).toDate();
+                        }
+                        if (leaveRequest["returnDate"] is Timestamp) {
+                          returnDate = (leaveRequest["returnDate"] as Timestamp).toDate();
+                        }
+                      } catch (e) {
+                        debugPrint("Error parsing dates: $e");
+                      }
 
-          var docs = snapshot.data!.docs;
+                      String purpose = leaveRequest["purpose"] ?? "N/A";
 
-          // Sort documents by createdAt in descending order
-          docs.sort((a, b) {
-            Timestamp aTime = a["createdAt"] ?? Timestamp.now();
-            Timestamp bTime = b["createdAt"] ?? Timestamp.now();
-            return bTime.compareTo(aTime);
-          });
+                      Color statusColor;
+                      String statusText;
 
-          return ListView.builder(
+                      if (status == "pending") {
+                        statusColor = Colors.orange;
+                        statusText = "Pending";
+                      } else if (status == "approved") {
+                        statusColor = Colors.green;
+                        statusText = "Approved";
+                      } else {
+                        statusColor = Colors.red;
+                        statusText = "Rejected";
+                      }
 
-            itemCount: docs.length,
-            padding: const EdgeInsets.all(10),
+                      return GestureDetector(
+                        onTap: () => showLeaveDetails(context, leaveRequest),
+                        child: Card(
 
-            itemBuilder: (context, index) {
+                          margin: const EdgeInsets.all(10),
 
-              var leaveRequest = docs[index];
-              String status = leaveRequest["status"] ?? "pending";
+                          child: Padding(
+                            padding: const EdgeInsets.all(15),
 
-              DateTime? leavingDate;
-              DateTime? returnDate;
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
 
-              try {
-                if (leaveRequest["leavingDate"] is Timestamp) {
-                  leavingDate = (leaveRequest["leavingDate"] as Timestamp).toDate();
-                }
-                if (leaveRequest["returnDate"] is Timestamp) {
-                  returnDate = (leaveRequest["returnDate"] as Timestamp).toDate();
-                }
-              } catch (e) {
-                debugPrint("Error parsing dates: $e");
-              }
+                              children: [
 
-              String purpose = leaveRequest["purpose"] ?? "N/A";
+                                Row(
+                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
 
-              Color statusColor;
-              String statusText;
+                                  children: [
 
-              if (status == "pending") {
-                statusColor = Colors.orange;
-                statusText = "Pending";
-              } else if (status == "approved") {
-                statusColor = Colors.green;
-                statusText = "Approved";
-              } else {
-                statusColor = Colors.red;
-                statusText = "Rejected";
-              }
+                                    Text(
+                                      "Leave Request",
+                                      style: Theme.of(context).textTheme.headlineSmall,
+                                    ),
 
-              return GestureDetector(
-                onTap: () => showLeaveDetails(context, leaveRequest),
-                child: Card(
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 12,
+                                        vertical: 6,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        color: statusColor.withValues(alpha: 0.2),
+                                        border: Border.all(color: statusColor),
+                                        borderRadius: BorderRadius.circular(20),
+                                      ),
+                                      child: Text(
+                                        statusText,
+                                        style: TextStyle(
+                                          color: statusColor,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
+                                    ),
 
-                  margin: const EdgeInsets.all(10),
-
-                  child: Padding(
-                    padding: const EdgeInsets.all(15),
-
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-
-                      children: [
-
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-
-                          children: [
-
-                            Text(
-                              "Leave Request",
-                              style: Theme.of(context).textTheme.headlineSmall,
-                            ),
-
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 12,
-                                vertical: 6,
-                              ),
-                              decoration: BoxDecoration(
-                                color: statusColor.withValues(alpha: 0.2),
-                                border: Border.all(color: statusColor),
-                                borderRadius: BorderRadius.circular(20),
-                              ),
-                              child: Text(
-                                statusText,
-                                style: TextStyle(
-                                  color: statusColor,
-                                  fontWeight: FontWeight.bold,
+                                  ],
                                 ),
-                              ),
-                            ),
 
-                          ],
-                        ),
+                                const SizedBox(height: 15),
 
-                        const SizedBox(height: 15),
+                                if (leavingDate != null)
+                                  Text(
+                                    "From: ${DateFormat('yyyy-MM-dd').format(leavingDate)}",
+                                    style: const TextStyle(fontSize: 14),
+                                  ),
 
-                        if (leavingDate != null)
-                          Text(
-                            "From: ${DateFormat('yyyy-MM-dd').format(leavingDate)}",
-                            style: const TextStyle(fontSize: 14),
-                          ),
+                                if (returnDate != null)
+                                  Text(
+                                    "To: ${DateFormat('yyyy-MM-dd').format(returnDate)}",
+                                    style: const TextStyle(fontSize: 14),
+                                  ),
 
-                        if (returnDate != null)
-                          Text(
-                            "To: ${DateFormat('yyyy-MM-dd').format(returnDate)}",
-                            style: const TextStyle(fontSize: 14),
-                          ),
+                                Text(
+                                  "Purpose: $purpose",
+                                  style: const TextStyle(fontSize: 14),
+                                ),
 
-                        Text(
-                          "Purpose: $purpose",
-                          style: const TextStyle(fontSize: 14),
-                        ),
+                                const SizedBox(height: 15),
 
-                        const SizedBox(height: 15),
-
-                        const Center(
-                          child: Text(
-                            "Tap to view full details",
-                            style: TextStyle(
-                              fontSize: 12,
-                              fontStyle: FontStyle.italic,
-                              color: Colors.grey,
-                            ),
-                          ),
-                        ),
-
-                        const SizedBox(height: 20),
-
-                        if (status == "approved")
-                          _ApprovedLeaveWidget(passId: leaveRequest["passId"])
-
-                        else if (status == "rejected")
-                          const Padding(
-                            padding: EdgeInsets.all(20),
-                            child: SizedBox(
-                              width: double.infinity,
-                              child: Center(
-                                child: Text(
-                                  "Your leave request has been rejected.",
-                                  style: TextStyle(
-                                    color: Colors.red,
-                                    fontWeight: FontWeight.bold,
-                                    fontSize: 16,
+                                const Center(
+                                  child: Text(
+                                    "Tap to view full details",
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      fontStyle: FontStyle.italic,
+                                      color: Colors.grey,
+                                    ),
                                   ),
                                 ),
-                              ),
-                            ),
-                          )
 
-                        else
-                          const Padding(
-                            padding: EdgeInsets.all(20),
-                            child: SizedBox(
-                              width: double.infinity,
-                              child: Center(
-                                child: Text(
-                                  "Awaiting warden approval...",
-                                  style: TextStyle(
-                                    color: Colors.orange,
-                                    fontWeight: FontWeight.bold,
-                                    fontSize: 16,
+                                const SizedBox(height: 20),
+
+                                if (status == "approved")
+                                  _ApprovedLeaveWidget(passId: leaveRequest["passId"])
+
+                                else if (status == "rejected")
+                                  const Padding(
+                                    padding: EdgeInsets.all(20),
+                                    child: SizedBox(
+                                      width: double.infinity,
+                                      child: Center(
+                                        child: Text(
+                                          "Your leave request has been rejected.",
+                                          style: TextStyle(
+                                            color: Colors.red,
+                                            fontWeight: FontWeight.bold,
+                                            fontSize: 16,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  )
+
+                                else
+                                  const Padding(
+                                    padding: EdgeInsets.all(20),
+                                    child: SizedBox(
+                                      width: double.infinity,
+                                      child: Center(
+                                        child: Text(
+                                          "Awaiting warden approval...",
+                                          style: TextStyle(
+                                            color: Colors.orange,
+                                            fontWeight: FontWeight.bold,
+                                            fontSize: 16,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
                                   ),
-                                ),
-                              ),
+
+                              ],
                             ),
                           ),
 
-                      ],
-                    ),
+                        ),
+                      );
+
+                    },
+
                   ),
-
-                ),
-              );
-
-            },
-
-          );
-
-        },
-
       ),
 
     );

@@ -8,8 +8,50 @@ import 'package:intl/intl.dart';
 
 import 'login_screen.dart';
 
-class WardenDashboard extends StatelessWidget {
+class WardenDashboard extends StatefulWidget {
   const WardenDashboard({super.key});
+
+  @override
+  State<WardenDashboard> createState() => _WardenDashboardState();
+}
+
+class _WardenDashboardState extends State<WardenDashboard> {
+
+  List<DocumentSnapshot> _pendingRequests = [];
+  bool _isLoading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _fetchPendingRequests();
+  }
+
+  Future<void> _fetchPendingRequests() async {
+    setState(() {
+      _isLoading = true;
+    });
+
+    try {
+      var snapshot = await FirebaseFirestore.instance
+          .collection("leave_requests")
+          .where("status", isEqualTo: "pending")
+          .get();
+
+      if (mounted) {
+        setState(() {
+          _pendingRequests = snapshot.docs;
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      debugPrint("Error fetching requests: $e");
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
+    }
+  }
 
   /// Builds a CircleAvatar with the student's photo from base64, or a fallback icon
   Widget _buildStudentAvatar(DocumentSnapshot request, {double radius = 25}) {
@@ -84,6 +126,8 @@ class WardenDashboard extends StatelessWidget {
       "passId": passRef.id
     });
 
+    // Refresh the list after approval
+    _fetchPendingRequests();
   }
 
   Future rejectRequest(BuildContext context, DocumentSnapshot request) async {
@@ -95,6 +139,8 @@ class WardenDashboard extends StatelessWidget {
       "status": "rejected"
     });
 
+    // Refresh the list after rejection
+    _fetchPendingRequests();
   }
 
   void showApproveConfirmation(BuildContext context, DocumentSnapshot request) {
@@ -226,107 +272,104 @@ class WardenDashboard extends StatelessWidget {
         ],
       ),
 
-      body: StreamBuilder(
-
-        stream: FirebaseFirestore.instance
-            .collection("leave_requests")
-            .where("status", isEqualTo: "pending")
-            .snapshots(),
-
-        builder: (context, snapshot) {
-
-          if (!snapshot.hasData) {
-            return const Center(child: CircularProgressIndicator());
-          }
-
-          var docs = snapshot.data!.docs;
-
-          if (docs.isEmpty) {
-            return const Center(child: Text("No Pending Requests"));
-          }
-
-          return ListView.builder(
-
-            itemCount: docs.length,
-
-            itemBuilder: (context, index) {
-
-              var request = docs[index];
-
-              return GestureDetector(
-                onTap: () => showLeaveDetails(context, request),
-                child: Card(
-
-                  margin: const EdgeInsets.all(10),
-
-                  child: Padding(
-                    padding: const EdgeInsets.all(15),
-
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-
-                      children: [
-
-                        Row(
-                          children: [
-                            _buildStudentAvatar(request, radius: 25),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text("${request["name"]}",
-                                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                                  Text("Roll: ${request["rollNumber"]}"),
-                                  Text("${request["degree"]} • ${request["hostel"]} - ${request["roomNumber"]}"),
-                                ],
-                              ),
-                            ),
-                          ],
+      body: RefreshIndicator(
+        onRefresh: _fetchPendingRequests,
+        child: _isLoading
+            ? const Center(child: CircularProgressIndicator())
+            : _pendingRequests.isEmpty
+                ? ListView(
+                    // Wrap in ListView so pull-to-refresh works even when empty
+                    children: const [
+                      SizedBox(height: 200),
+                      Center(child: Text("No Pending Requests")),
+                      SizedBox(height: 20),
+                      Center(
+                        child: Text(
+                          "Pull down to refresh",
+                          style: TextStyle(color: Colors.grey, fontSize: 13),
                         ),
+                      ),
+                    ],
+                  )
+                : ListView.builder(
 
-                        const SizedBox(height: 10),
+                    itemCount: _pendingRequests.length,
 
-                        Text("Purpose: ${request["purpose"]}"),
+                    itemBuilder: (context, index) {
 
-                        const SizedBox(height: 10),
+                      var request = _pendingRequests[index];
 
-                        Row(
+                      return GestureDetector(
+                        onTap: () => showLeaveDetails(context, request),
+                        child: Card(
 
-                          children: [
+                          margin: const EdgeInsets.all(10),
 
-                            ElevatedButton(
-                              onPressed: () {
-                                showApproveConfirmation(context, request);
-                              },
-                              child: const Text("Approve"),
+                          child: Padding(
+                            padding: const EdgeInsets.all(15),
+
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+
+                              children: [
+
+                                Row(
+                                  children: [
+                                    _buildStudentAvatar(request, radius: 25),
+                                    const SizedBox(width: 12),
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          Text("${request["name"]}",
+                                            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                                          Text("Roll: ${request["rollNumber"]}"),
+                                          Text("${request["degree"]} • ${request["hostel"]} - ${request["roomNumber"]}"),
+                                        ],
+                                      ),
+                                    ),
+                                  ],
+                                ),
+
+                                const SizedBox(height: 10),
+
+                                Text("Purpose: ${request["purpose"]}"),
+
+                                const SizedBox(height: 10),
+
+                                Row(
+
+                                  children: [
+
+                                    ElevatedButton(
+                                      onPressed: () {
+                                        showApproveConfirmation(context, request);
+                                      },
+                                      child: const Text("Approve"),
+                                    ),
+
+                                    const SizedBox(width: 10),
+
+                                    ElevatedButton(
+                                      onPressed: () {
+                                        showRejectConfirmation(context, request);
+                                      },
+                                      child: const Text("Reject"),
+                                    ),
+
+                                  ],
+                                )
+
+                              ],
                             ),
+                          ),
 
-                            const SizedBox(width: 10),
+                        ),
+                      );
 
-                            ElevatedButton(
-                              onPressed: () {
-                                showRejectConfirmation(context, request);
-                              },
-                              child: const Text("Reject"),
-                            ),
+                    },
 
-                          ],
-                        )
-
-                      ],
-                    ),
                   ),
-
-                ),
-              );
-
-            },
-
-          );
-
-        },
-
       ),
 
     );

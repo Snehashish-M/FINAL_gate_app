@@ -2,8 +2,8 @@ import 'dart:convert';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:google_sign_in/google_sign_in.dart';
+import 'package:nit_goa_gate_app/services/user_cache.dart';
 
 import 'day_scholar.dart';
 import 'hostel_exit.dart';
@@ -29,30 +29,20 @@ class _StudentDashboardState extends State<StudentDashboard> {
     _loadPhoto();
   }
 
-  Future<void> _loadPhoto() async {
-    User? user = FirebaseAuth.instance.currentUser;
-    if (user == null) return;
-
-    try {
-      var doc = await FirebaseFirestore.instance
-          .collection("users")
-          .doc(user.uid)
-          .get();
-
-      if (doc.exists && doc.data() != null) {
-        String? photo = doc.data()!["photo"];
-        if (photo != null && photo.isNotEmpty && mounted) {
-          try {
-            setState(() {
-              photoBytes = base64Decode(photo);
-            });
-          } catch (e) {
-            debugPrint("Error decoding photo: $e");
-          }
+  void _loadPhoto() {
+    // Use cached profile data — no Firestore read needed
+    var data = UserCache().profileData;
+    if (data != null) {
+      String? photo = data["photo"];
+      if (photo != null && photo.isNotEmpty) {
+        try {
+          setState(() {
+            photoBytes = base64Decode(photo);
+          });
+        } catch (e) {
+          debugPrint("Error decoding photo: $e");
         }
       }
-    } catch (e) {
-      debugPrint("Error loading photo: $e");
     }
   }
 
@@ -64,9 +54,10 @@ class _StudentDashboardState extends State<StudentDashboard> {
           builder: (context) => const ProfileSetup(),
         ),
       );
-      // Reload photo in case user changed it
+      // Reload photo from updated cache
       _loadPhoto();
     } else if (value == "logout") {
+      UserCache().clear();
       await GoogleSignIn().signOut();
       await FirebaseAuth.instance.signOut();
 

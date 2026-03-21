@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'firebase_options.dart';
+import 'package:nit_goa_gate_app/services/user_cache.dart';
 import 'package:nit_goa_gate_app/screens/login_screen.dart';
 import 'package:nit_goa_gate_app/screens/student_dashboard.dart';
 import 'package:nit_goa_gate_app/screens/warden_dashboard.dart';
@@ -57,7 +57,6 @@ class _AuthGateState extends State<AuthGate> {
     User? user = FirebaseAuth.instance.currentUser;
 
     if (user == null) {
-      // Not signed in — show login screen
       if (!mounted) return;
       setState(() {
         _isLoading = false;
@@ -65,24 +64,19 @@ class _AuthGateState extends State<AuthGate> {
       return;
     }
 
-    // User is signed in — determine where to go
     try {
-      var doc = await FirebaseFirestore.instance
-          .collection("users")
-          .doc(user.uid)
-          .get();
+      // Single Firestore read — cached for all subsequent screens
+      var data = await UserCache().loadProfile(forceRefresh: true);
 
       if (!mounted) return;
 
-      if (!doc.exists || doc.data() == null) {
-        // User doc missing — go to login
+      if (data == null) {
         setState(() {
           _isLoading = false;
         });
         return;
       }
 
-      var data = doc.data()!;
       String role = data["role"] ?? "student";
 
       if (role == "warden") {
@@ -91,7 +85,6 @@ class _AuthGateState extends State<AuthGate> {
           MaterialPageRoute(builder: (context) => const WardenDashboard()),
         );
       } else {
-        // Check if profile is complete
         bool hasRollNumber = data["rollNumber"] != null &&
             (data["rollNumber"] as String).isNotEmpty;
         bool hasDegree = data["degree"] != null &&

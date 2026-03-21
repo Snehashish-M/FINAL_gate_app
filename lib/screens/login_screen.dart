@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:google_sign_in/google_sign_in.dart';
+import 'package:nit_goa_gate_app/services/user_cache.dart';
 
 import 'student_dashboard.dart';
 import 'warden_dashboard.dart';
@@ -79,12 +80,9 @@ class LoginScreen extends StatelessWidget {
         }
 
         // Set user data; only set role to "student" if no role exists yet
-        // Extract roll number from email prefix (e.g. 23ece1031 from 23ece1031@nitgoa.ac.in)
         String email = user.email ?? "";
         String rollNumber = email.contains("@") ? email.split("@")[0] : "";
 
-        // Extract name from display name by removing roll number + underscore prefix
-        // e.g. "23ece1031_SPARSH KESHAV RAUL" → "SPARSH KESHAV RAUL"
         String displayName = user.displayName ?? "";
         String name = displayName;
         if (displayName.contains("_")) {
@@ -107,6 +105,9 @@ class LoginScreen extends StatelessWidget {
             .doc(user.uid)
             .set(userData, SetOptions(merge: true));
 
+        // Cache the profile right after login (avoids re-reading in other screens)
+        await UserCache().loadProfile(forceRefresh: true);
+
         // Determine role from Firestore (use existing role, or default "student")
         String role = existingRole.isNotEmpty ? existingRole : "student";
 
@@ -120,8 +121,25 @@ class LoginScreen extends StatelessWidget {
             ),
           );
         } else {
-          // Check if student profile is complete
-          bool isProfileComplete = await checkProfileCompletion(user.uid);
+          // Check if student profile is complete using cached data
+          var cachedData = UserCache().profileData;
+          bool isProfileComplete = false;
+
+          if (cachedData != null) {
+            bool hasRollNumber = cachedData["rollNumber"] != null &&
+                (cachedData["rollNumber"] as String).isNotEmpty;
+            bool hasDegree = cachedData["degree"] != null &&
+                (cachedData["degree"] as String).isNotEmpty;
+            bool hasHostel = cachedData["hostel"] != null &&
+                (cachedData["hostel"] as String).isNotEmpty;
+            bool hasRoomNumber = cachedData["roomNumber"] != null &&
+                (cachedData["roomNumber"] as String).isNotEmpty;
+            bool hasPhone = cachedData["phone"] != null &&
+                (cachedData["phone"] as String).isNotEmpty;
+
+            isProfileComplete = hasRollNumber && hasDegree && hasHostel &&
+                hasRoomNumber && hasPhone;
+          }
 
           if (!context.mounted) return;
 
@@ -149,44 +167,6 @@ class LoginScreen extends StatelessWidget {
           SnackBar(content: Text("Login failed: ${e.toString()}")),
         );
       }
-    }
-  }
-
-  Future<bool> checkProfileCompletion(String userId) async {
-    try {
-      var doc = await FirebaseFirestore.instance
-          .collection("users")
-          .doc(userId)
-          .get();
-
-      if (!doc.exists) {
-        return false;
-      }
-
-      var data = doc.data();
-
-      if (data == null) {
-        return false;
-      }
-
-      // Check if all required fields are filled
-      bool hasRollNumber = data["rollNumber"] != null &&
-          (data["rollNumber"] as String).isNotEmpty;
-      bool hasDegree = data["degree"] != null &&
-          (data["degree"] as String).isNotEmpty;
-      bool hasHostel = data["hostel"] != null &&
-          (data["hostel"] as String).isNotEmpty;
-      bool hasRoomNumber = data["roomNumber"] != null &&
-          (data["roomNumber"] as String).isNotEmpty;
-      bool hasPhone = data["phone"] != null &&
-          (data["phone"] as String).isNotEmpty;
-
-      // Photo is now optional
-      return hasRollNumber && hasDegree && hasHostel &&
-          hasRoomNumber && hasPhone;
-    } catch (e) {
-      debugPrint("Error checking profile: $e");
-      return false;
     }
   }
 

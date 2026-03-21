@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:intl/intl.dart';
+import 'package:nit_goa_gate_app/services/user_cache.dart';
 
 class LeaveApplication extends StatefulWidget {
   const LeaveApplication({super.key});
@@ -31,7 +32,11 @@ class _LeaveApplicationState extends State<LeaveApplication> {
   @override
   void initState() {
     super.initState();
-    loadUserProfile();
+    // Use cached profile — no Firestore read
+    userData = UserCache().profileData;
+    if (userData == null) {
+      _loadFromFirestore();
+    }
   }
 
   @override
@@ -44,20 +49,13 @@ class _LeaveApplicationState extends State<LeaveApplication> {
     super.dispose();
   }
 
-  Future loadUserProfile() async {
-
-    User? user = FirebaseAuth.instance.currentUser;
-
-    if (user == null) return;
-
-    var doc = await FirebaseFirestore.instance
-        .collection("users")
-        .doc(user.uid)
-        .get();
-
-    setState(() {
-      userData = doc.data();
-    });
+  Future _loadFromFirestore() async {
+    var data = await UserCache().loadProfile();
+    if (mounted) {
+      setState(() {
+        userData = data;
+      });
+    }
   }
 
   Future pickDate(bool isLeaving) async {

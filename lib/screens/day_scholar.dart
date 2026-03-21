@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:qr_flutter/qr_flutter.dart';
+import 'package:nit_goa_gate_app/services/user_cache.dart';
 
 class DayScholar extends StatefulWidget {
   const DayScholar({super.key});
@@ -22,7 +23,12 @@ class _DayScholarState extends State<DayScholar> {
   @override
   void initState() {
     super.initState();
-    loadUserProfile();
+    // Use cached profile — no Firestore read
+    userData = UserCache().profileData;
+    if (userData == null) {
+      // Fallback: load from Firestore if cache is empty
+      _loadFromFirestore();
+    }
   }
 
   @override
@@ -31,30 +37,13 @@ class _DayScholarState extends State<DayScholar> {
     super.dispose();
   }
 
-  Future loadUserProfile() async {
-
-    User? user = FirebaseAuth.instance.currentUser;
-
-    if (user == null) return;
-
-    try {
-      var doc = await FirebaseFirestore.instance
-          .collection("users")
-          .doc(user.uid)
-          .get();
-
+  Future _loadFromFirestore() async {
+    var data = await UserCache().loadProfile();
+    if (mounted) {
       setState(() {
-        userData = doc.data();
+        userData = data;
       });
-    } catch (e) {
-      debugPrint("Error loading user profile: $e");
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text("Error loading profile: ${e.toString()}")),
-        );
-      }
     }
-
   }
 
   Future generateQR() async {
